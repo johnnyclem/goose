@@ -75,23 +75,6 @@ impl OpenRouterProvider {
 
         handle_response_openai_compat(response).await
     }
-
-    // Extract tools from system message if it contains a tools section
-    fn extract_tools_from_system(system: &str) -> Option<Vec<Tool>> {
-        if let Some(tools_start) = system.find("<functions>") {
-            if let Some(tools_end) = system.find("</functions>") {
-                let tools_text = &system[tools_start..=tools_end + 11]; // +11 to include "</functions>"
-                match serde_json::from_str::<Vec<Tool>>(tools_text) {
-                    Ok(tools) => return Some(tools),
-                    Err(e) => {
-                        tracing::warn!("Failed to parse tools from system message: {}", e);
-                        return None;
-                    }
-                }
-            }
-        }
-        None
-    }
 }
 
 /// Update the request when using anthropic model.
