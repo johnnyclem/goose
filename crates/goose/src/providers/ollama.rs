@@ -60,11 +60,9 @@ impl OllamaProvider {
         };
 
         let base_url = Url::parse(&base)
-            .map_err(|e| ProviderError::RequestFailed(format!("Invalid OLLAMA_HOST: {e}")))?;
+            .map_err(|e| ProviderError::RequestFailed(format!("Invalid base URL: {e}")))?;
         let url = base_url.join("v1/chat/completions").map_err(|e| {
-            ProviderError::RequestFailed(format!(
-                "Failed to resolve join {base_url} with /v1/chat/completions: {e}"
-            ))
+            ProviderError::RequestFailed(format!("Failed to construct endpoint URL: {e}"))
         })?;
 
         let response = self.client.post(url).json(&payload).send().await?;

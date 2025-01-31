@@ -55,14 +55,15 @@ impl GroqProvider {
     }
 
     async fn post(&self, payload: Value) -> anyhow::Result<Value, ProviderError> {
-        let url = format!(
-            "{}/openai/v1/chat/completions",
-            self.host.trim_end_matches('/')
-        );
+        let base_url = Url::parse(&self.host)
+            .map_err(|e| ProviderError::RequestFailed(format!("Invalid base URL: {e}")))?;
+        let url = base_url.join("openai/v1/chat/completions").map_err(|e| {
+            ProviderError::RequestFailed(format!("Failed to construct endpoint URL: {e}"))
+        })?;
 
         let response = self
             .client
-            .post(&url)
+            .post(url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&payload)
             .send()
