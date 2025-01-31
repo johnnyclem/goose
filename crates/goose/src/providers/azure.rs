@@ -82,7 +82,7 @@ impl AzureProvider {
 
         let response: reqwest::Response = self
             .client
-            .post(url)
+            .post(url.to_string())
             .header("api-key", &self.api_key)
             .json(&payload)
             .send()
