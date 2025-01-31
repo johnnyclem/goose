@@ -55,6 +55,14 @@ ensure-main:
         exit 1; \
     fi
 
+    # check that main is up to date with upstream main
+    # @{u} refers to upstream branch of current branch
+    if [ "$(git rev-parse HEAD)" != "$(git rev-parse @{u})" ]; then \
+        echo "Error: Your branch is not up to date with the upstream main branch"; \
+        echo "  ensure your branch is up to date (git pull)"; \
+        exit 1; \
+    fi
+
 # validate the version is semver, and not the current version
 validate version:
     #!/usr/bin/env bash
