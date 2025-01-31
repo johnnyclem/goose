@@ -93,49 +93,7 @@ fn update_request_for_anthropic(original_payload: &Value) -> Value {
             .as_object_mut()
             .and_then(|obj| obj.get_mut("messages"))
             .and_then(|messages| messages.as_array_mut())
-        {
-            // Add "cache_control" to the last and second-to-last "user" messages.
-            // During each turn, we mark the final message with cache_control so the conversation can be
-            // incrementally cached. The second-to-last user message is also marked for caching with the
-            // cache_control parameter, so that this checkpoint can read from the previous cache.
-            let mut user_count = 0;
-            for message in messages_spec.iter_mut().rev() {
-                if message.get("role") == Some(&json!("user")) {
-                    if let Some(content) = message.get_mut("content") {
-                        if let Some(content_str) = content.as_str() {
-                            *content = json!([{
-                                "type": "text",
-                                "text": content_str,
-                                "cache_control": { "type": "ephemeral" }
-                            }]);
-                        }
-                    }
-                    user_count += 1;
-                    if user_count >= 2 {
-                        break;
-                    }
-                }
-            }
-
-            // Update the system message to have cache_control field.
-            if let Some(system_message) = messages_spec
-                .iter_mut()
-                .find(|msg| msg.get("role") == Some(&json!("system")))
-            {
-                if let Some(content) = system_message.get_mut("content") {
-                    if let Some(content_str) = content.as_str() {
-                        *system_message = json!({
-                            "role": "system",
-                            "content": [{
-                                "type": "text",
-                                "text": content_str,
-                                "cache_control": { "type": "ephemeral" }
-                            }]
-                        });
-                    }
-                }
-            }
-        }
+        {}
     }
     payload
 }
@@ -150,59 +108,7 @@ fn update_request_for_deepseek(original_payload: &Value) -> Value {
         .as_object_mut()
         .and_then(|obj| obj.get_mut("messages"))
         .and_then(|messages| messages.as_array_mut())
-    {
-        // Add "cache_control" to the last and second-to-last "user" messages
-        let mut user_count = 0;
-        for message in messages_spec.iter_mut().rev() {
-            if message.get("role") == Some(&json!("user")) {
-                if let Some(content) = message.get_mut("content") {
-                    if let Some(content_str) = content.as_str() {
-                        *content = json!([{
-                            "type": "text",
-                            "text": content_str,
-                            "cache_control": { "type": "ephemeral" }
-                        }]);
-                    }
-                }
-                user_count += 1;
-                if user_count >= 2 {
-                    break;
-                }
-            }
-        }
-
-        // Update the system message to include tools and have cache_control field
-        if let Some(system_message) = messages_spec
-            .iter_mut()
-            .find(|msg| msg.get("role") == Some(&json!("system")))
-        {
-            if let Some(content) = system_message.get_mut("content") {
-                if let Some(content_str) = content.as_str() {
-                    let system_content = if let Some(tools) = tools {
-                        // Format tools as a string
-                        let tools_str = serde_json::to_string_pretty(&tools)
-                            .unwrap_or_else(|_| "[]".to_string());
-                        format!(
-                            "{}\n\nYou have access to the following tools:\n<functions>\n{}\n</functions>\n\nTo use a tool, respond with a message containing an XML-like function call block like this:\n<function_calls>\n<invoke name=\"tool_name\">\n<parameter name=\"param_name\">value</parameter>\n</invoke>\n</function_calls>",
-                            content_str,
-                            tools_str
-                        )
-                    } else {
-                        content_str.to_string()
-                    };
-
-                    *system_message = json!({
-                        "role": "system",
-                        "content": [{
-                            "type": "text",
-                            "text": system_content,
-                            "cache_control": { "type": "ephemeral" }
-                        }]
-                    });
-                }
-            }
-        }
-    }
+    {}
 
     // Remove any tools/function calling capabilities from the request
     if let Some(obj) = payload.as_object_mut() {
