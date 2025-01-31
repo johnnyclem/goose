@@ -19,9 +19,6 @@ pub const AZURE_API_VERSION: &str = "2024-10-21";
 pub const AZURE_OPENAI_KNOWN_MODELS: &[&str] = &[
     "gpt-4o",
     "gpt-4o-mini",
-    "o1",
-    "o1-mini",
-    "o1-preview",
     "gpt-4",
 ];
 
