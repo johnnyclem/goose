@@ -70,13 +70,9 @@ impl OllamaProvider {
             })?;
         }
 
-        println!("Ollama base_url: {:?}", base_url.to_string());
-
         let url = base_url.join("v1/chat/completions").map_err(|e| {
             ProviderError::RequestFailed(format!("Failed to construct endpoint URL: {e}"))
         })?;
-
-        println!("Ollama url: {:?}", url.to_string());
 
         let response = self.client.post(url).json(&payload).send().await?;
 
