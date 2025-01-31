@@ -166,7 +166,7 @@ Ollama provides local LLMs, which requires a bit more set up before you can use 
 
 
 :::info Ollama Endpoint Construction
-For Ollama, we set default host to `localhost` and port to `11434` if you don't provide it. When constructing the URL, we preprend "http://" if the scheme is not http or https.
+For Ollama, we set default host to `localhost` and port to `11434` if you don't provide it. When constructing the URL, we preprend `"http://"` if the scheme is not http or https.
 If you're running Ollama on port 80 or 443, you have to set `OLLMA_HOST=http://host:port`
 :::
 
