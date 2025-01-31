@@ -63,20 +63,18 @@ impl AzureProvider {
     }
 
     async fn post(&self, payload: Value) -> Result<Value, ProviderError> {
-        let base_url = url::Url::parse(&self.endpoint)
+        let mut base_url = url::Url::parse(&self.endpoint)
             .map_err(|e| ProviderError::RequestFailed(format!("Invalid base URL: {e}")))?;
 
-        let path = format!(
-            "openai/deployments/{}/chat/completions?api-version={}",
-            self.deployment_name, AZURE_API_VERSION
-        );
-        let url = base_url.join(&path).map_err(|e| {
-            ProviderError::RequestFailed(format!("Failed to construct endpoint url: {e}"))
-        })?;
+        base_url.set_path(&format!(
+            "openai/deployments/{}/chat/completions",
+            self.deployment_name
+        ));
+        base_url.set_query(Some(&format!("api-version={}", AZURE_API_VERSION)));
 
         let response: reqwest::Response = self
             .client
-            .post(url)
+            .post(base_url)
             .header("api-key", &self.api_key)
             .json(&payload)
             .send()
