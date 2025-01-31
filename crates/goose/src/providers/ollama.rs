@@ -53,6 +53,7 @@ impl OllamaProvider {
     }
 
     async fn post(&self, payload: Value) -> Result<Value, ProviderError> {
+        // TODO: remove this later when the UI handles provider config refresh
         // OLLAMA_HOST is sometimes just the 'host' or 'host:port' without a scheme
         let base = if self.host.starts_with("http://") || self.host.starts_with("https://") {
             self.host.clone()
@@ -60,19 +61,18 @@ impl OllamaProvider {
             format!("http://{}", self.host)
         };
 
-        let mut base_url = Url::parse(&base)
-            .map_err(|e| ProviderError::RequestFailed(format!("Invalid base URL: {e}")))?;
+        let mut url = Url::parse(&base).map_err(|e| {
+            tracing::debug!("Invalid host: {}, base: {}", &self.host, &base);
+            ProviderError::RequestFailed(format!("Invalid base URL: {e}"))
+        })?;
 
         // Set the default port if missing
-        if base_url.port().is_none() {
-            base_url.set_port(Some(OLLAMA_DEFAULT_PORT)).map_err(|_| {
+        if url.port().is_none() {
+            url.set_port(Some(OLLAMA_DEFAULT_PORT)).map_err(|_| {
                 ProviderError::RequestFailed("Failed to set default port".to_string())
             })?;
         }
-
-        let url = base_url.join("v1/chat/completions").map_err(|e| {
-            ProviderError::RequestFailed(format!("Failed to construct endpoint URL: {e}"))
-        })?;
+        url.set_path("v1/chat/completions");
 
         let response = self.client.post(url).json(&payload).send().await?;
 

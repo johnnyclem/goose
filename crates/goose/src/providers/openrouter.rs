@@ -11,7 +11,6 @@ use crate::message::Message;
 use crate::model::ModelConfig;
 use crate::providers::formats::openai::{create_request, get_usage, response_to_message};
 use mcp_core::tool::Tool;
-use url::Url;
 
 pub const OPENROUTER_DEFAULT_MODEL: &str = "anthropic/claude-3.5-sonnet";
 pub const OPENROUTER_MODEL_PREFIX_ANTHROPIC: &str = "anthropic";
@@ -57,11 +56,11 @@ impl OpenRouterProvider {
     }
 
     async fn post(&self, payload: Value) -> Result<Value, ProviderError> {
-        let base_url = Url::parse(&self.host)
-            .map_err(|e| ProviderError::RequestFailed(format!("Invalid base URL: {e}")))?;
-        let url = base_url.join("api/v1/chat/completions").map_err(|e| {
-            ProviderError::RequestFailed(format!("Failed to construct endpoint URL: {e}"))
+        let mut url = url::Url::parse(&self.host).map_err(|e| {
+            tracing::debug!("Invalid host: {}", &self.host);
+            ProviderError::RequestFailed(format!("Invalid base URL: {e}"))
         })?;
+        url.set_path("api/v1/chat/completions");
 
         let response = self
             .client

@@ -10,7 +10,6 @@ use mcp_core::Tool;
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use std::time::Duration;
-use url::Url;
 
 pub const GROQ_API_HOST: &str = "https://api.groq.com";
 pub const GROQ_DEFAULT_MODEL: &str = "llama-3.3-70b-versatile";
@@ -55,11 +54,11 @@ impl GroqProvider {
     }
 
     async fn post(&self, payload: Value) -> anyhow::Result<Value, ProviderError> {
-        let base_url = Url::parse(&self.host)
-            .map_err(|e| ProviderError::RequestFailed(format!("Invalid base URL: {e}")))?;
-        let url = base_url.join("openai/v1/chat/completions").map_err(|e| {
-            ProviderError::RequestFailed(format!("Failed to construct endpoint URL: {e}"))
+        let mut url = url::Url::parse(&self.host).map_err(|e| {
+            tracing::debug!("Invalid host: {}", &self.host);
+            ProviderError::RequestFailed(format!("Invalid base URL: {e}"))
         })?;
+        url.set_path("openai/v1/chat/completions");
 
         let response = self
             .client

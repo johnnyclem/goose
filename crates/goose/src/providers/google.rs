@@ -10,7 +10,6 @@ use mcp_core::tool::Tool;
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use std::time::Duration;
-use url::Url;
 
 pub const GOOGLE_API_HOST: &str = "https://generativelanguage.googleapis.com";
 pub const GOOGLE_DEFAULT_MODEL: &str = "gemini-2.0-flash-exp";
@@ -62,17 +61,15 @@ impl GoogleProvider {
     }
 
     async fn post(&self, payload: Value) -> Result<Value, ProviderError> {
-        let base_url = Url::parse(&self.host)
-            .map_err(|e| ProviderError::RequestFailed(format!("Invalid base URL: {e}")))?;
-
-        let url = base_url
-            .join(&format!(
-                "v1beta/models/{}:generateContent?key={}",
-                self.model.model_name, self.api_key
-            ))
-            .map_err(|e| {
-                ProviderError::RequestFailed(format!("Failed to construct endpoint URL: {e}"))
-            })?;
+        let mut url = url::Url::parse(&self.host).map_err(|e| {
+            tracing::debug!("Invalid host: {}", &self.host);
+            ProviderError::RequestFailed(format!("Invalid base URL: {e}"))
+        })?;
+        url.set_path(&format!(
+            "v1beta/models/{}/generateContent",
+            self.model.model_name
+        ));
+        url.set_query(Some(&format!("key={}", self.api_key)));
 
         let response = self
             .client

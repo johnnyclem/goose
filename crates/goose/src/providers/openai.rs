@@ -59,11 +59,11 @@ impl OpenAiProvider {
     }
 
     async fn post(&self, payload: Value) -> Result<Value, ProviderError> {
-        let base_url = url::Url::parse(&self.host)
-            .map_err(|e| ProviderError::RequestFailed(format!("Invalid base URL: {e}")))?;
-        let url = base_url.join("v1/chat/completions").map_err(|e| {
-            ProviderError::RequestFailed(format!("Failed to construct endpoint URL: {e}"))
+        let mut url = url::Url::parse(&self.host).map_err(|e| {
+            tracing::debug!("Invalid host: {}", &self.host);
+            ProviderError::RequestFailed(format!("Invalid base URL: {e}"))
         })?;
+        url.set_path("v1/chat/completions");
 
         let response = self
             .client

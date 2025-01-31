@@ -78,10 +78,9 @@ impl LangfuseBatchManager {
         }
 
         let payload = json!({ "batch": self.batch });
-        let base_url = Url::parse(&self.base_url).map_err(|e| format!("Invalid base URL: {e}"))?;
-        let url = base_url
-            .join("api/public/ingestion")
-            .map_err(|e| format!("Failed to construct endpoint URL: {e}"))?;
+
+        let mut url = Url::parse(&self.base_url).map_err(|e| format!("Invalid base URL: {e}"))?;
+        url.set_path("api/public/ingestion");
 
         let response = self
             .client
