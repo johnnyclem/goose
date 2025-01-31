@@ -80,13 +80,9 @@ impl AzureProvider {
             .append_pair("api-version", AZURE_API_VERSION)
             .finish();
 
-        tracing::warn!("URL: {}", url);
-
-        println!("URL: {}", url);
-
         let response: reqwest::Response = self
             .client
-            .post(url.as_str())
+            .post(url)
             .header("api-key", &self.api_key)
             .json(&payload)
             .send()
