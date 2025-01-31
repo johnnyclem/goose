@@ -1,18 +1,20 @@
 use anyhow::Result;
 use axum::{extract::Query, response::Html, routing::get, Router};
 use base64::Engine;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::Digest;
 use std::{collections::HashMap, fs, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::sync::{oneshot, Mutex as TokioMutex};
+use url::Url;
 
 lazy_static! {
     static ref OAUTH_MUTEX: TokioMutex<()> = TokioMutex::new(());
 }
-use url::Url;
+
+pub const DEFAULT_REDIRECT_URL: &str = "http://localhost:8020";
 
 #[derive(Debug, Clone)]
 struct OidcEndpoints {
@@ -20,58 +22,59 @@ struct OidcEndpoints {
     token_endpoint: String,
 }
 
-#[derive(Serialize, Deserialize)]
-struct TokenData {
+#[derive(Debug, Serialize, Deserialize)]
+struct TokenCache {
     access_token: String,
     expires_at: Option<DateTime<Utc>>,
 }
 
-struct TokenCache {
-    cache_path: PathBuf,
+#[derive(Debug, Deserialize)]
+struct TokenResponse {
+    access_token: String,
+    expires_in: Option<u64>,
 }
 
-fn get_base_path() -> PathBuf {
-    const BASE_PATH: &str = ".config/goose/databricks/oauth";
-    let home_dir = std::env::var("HOME").expect("HOME environment variable not set");
-    PathBuf::from(home_dir).join(BASE_PATH)
+fn get_cache_path(client_id: &str, scopes: &[String]) -> PathBuf {
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(client_id.as_bytes());
+    hasher.update(scopes.join(",").as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+
+    let base_path = dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("goose/google/oauth");
+    
+    fs::create_dir_all(&base_path).unwrap_or_default();
+    base_path.join(format!("{}.json", hash))
 }
 
-impl TokenCache {
-    fn new(host: &str, client_id: &str, scopes: &[String]) -> Self {
-        let mut hasher = sha2::Sha256::new();
-        hasher.update(host.as_bytes());
-        hasher.update(client_id.as_bytes());
-        hasher.update(scopes.join(",").as_bytes());
-        let hash = format!("{:x}", hasher.finalize());
-
-        fs::create_dir_all(get_base_path()).unwrap();
-        let cache_path = get_base_path().join(format!("{}.json", hash));
-
-        Self { cache_path }
-    }
-
-    fn load_token(&self) -> Option<TokenData> {
-        if let Ok(contents) = fs::read_to_string(&self.cache_path) {
-            if let Ok(token_data) = serde_json::from_str::<TokenData>(&contents) {
-                if let Some(expires_at) = token_data.expires_at {
-                    if expires_at > Utc::now() {
-                        return Some(token_data);
-                    }
-                } else {
-                    return Some(token_data);
+fn load_cached_token(client_id: &str, scopes: &[String]) -> Option<String> {
+    let cache_path = get_cache_path(client_id, scopes);
+    if let Ok(contents) = fs::read_to_string(cache_path) {
+        if let Ok(cache) = serde_json::from_str::<TokenCache>(&contents) {
+            if let Some(expires_at) = cache.expires_at {
+                if expires_at > Utc::now() {
+                    return Some(cache.access_token);
                 }
             }
         }
-        None
     }
+    None
+}
 
-    fn save_token(&self, token_data: &TokenData) -> Result<()> {
-        if let Some(parent) = self.cache_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let contents = serde_json::to_string(token_data)?;
-        fs::write(&self.cache_path, contents)?;
-        Ok(())
+fn save_token_cache(client_id: &str, scopes: &[String], token: &str, expires_in: Option<u64>) {
+    let expires_at = expires_in.map(|secs| {
+        Utc::now() + Duration::seconds(secs as i64)
+    });
+
+    let cache = TokenCache {
+        access_token: token.to_string(),
+        expires_at,
+    };
+
+    let cache_path = get_cache_path(client_id, scopes);
+    if let Ok(contents) = serde_json::to_string(&cache) {
+        fs::write(cache_path, contents).unwrap_or_default();
     }
 }
 
@@ -112,6 +115,7 @@ async fn get_workspace_endpoints(host: &str) -> Result<OidcEndpoints> {
 struct OAuthFlow {
     endpoints: OidcEndpoints,
     client_id: String,
+    client_secret: String,
     redirect_url: String,
     scopes: Vec<String>,
     state: String,
@@ -122,12 +126,14 @@ impl OAuthFlow {
     fn new(
         endpoints: OidcEndpoints,
         client_id: String,
+        client_secret: String,
         redirect_url: String,
         scopes: Vec<String>,
     ) -> Self {
         Self {
             endpoints,
             client_id,
+            client_secret,
             redirect_url,
             scopes,
             state: nanoid::nanoid!(16),
@@ -158,52 +164,32 @@ impl OAuthFlow {
         )
     }
 
-    async fn exchange_code_for_token(&self, code: &str) -> Result<TokenData> {
+    async fn exchange_code(&self, code: &str) -> Result<TokenResponse> {
+        let client = reqwest::Client::new();
         let params = [
-            ("grant_type", "authorization_code"),
+            ("client_id", self.client_id.as_str()),
+            ("client_secret", self.client_secret.as_str()),
             ("code", code),
-            ("redirect_uri", &self.redirect_url),
-            ("code_verifier", &self.verifier),
-            ("client_id", &self.client_id),
+            ("redirect_uri", self.redirect_url.as_str()),
+            ("grant_type", "authorization_code"),
+            ("code_verifier", self.verifier.as_str()),
         ];
 
-        let client = reqwest::Client::new();
-        let resp = client
+        let response = client
             .post(&self.endpoints.token_endpoint)
-            .header("Content-Type", "application/x-www-form-urlencoded")
             .form(&params)
             .send()
             .await?;
 
-        if !resp.status().is_success() {
-            let err_text = resp.text().await?;
-            return Err(anyhow::anyhow!(
-                "Failed to exchange code for token: {}",
-                err_text
-            ));
+        if !response.status().is_success() {
+            let error = response.text().await?;
+            return Err(anyhow::anyhow!("Failed to exchange code for token: {}", error));
         }
 
-        let token_response: Value = resp.json().await?;
-        let access_token = token_response
-            .get("access_token")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("access_token not found in token response"))?
-            .to_string();
-
-        let expires_in = token_response
-            .get("expires_in")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(3600);
-
-        let expires_at = Utc::now() + chrono::Duration::seconds(expires_in as i64);
-
-        Ok(TokenData {
-            access_token,
-            expires_at: Some(expires_at),
-        })
+        response.json().await.map_err(Into::into)
     }
 
-    async fn execute(&self) -> Result<TokenData> {
+    async fn execute(&self) -> Result<TokenResponse> {
         // Create a channel that will send the auth code from the app process
         let (tx, rx) = oneshot::channel();
         let state = self.state.clone();
@@ -275,7 +261,25 @@ impl OAuthFlow {
         server_handle.abort();
 
         // Exchange the code for a token
-        self.exchange_code_for_token(&code).await
+        self.exchange_code(&code).await
+    }
+
+    fn new_with_endpoints(
+        endpoints: OidcEndpoints,
+        client_id: String,
+        client_secret: String,
+        redirect_url: String,
+        scopes: Vec<String>,
+    ) -> Self {
+        Self {
+            endpoints,
+            client_id,
+            client_secret,
+            redirect_url,
+            scopes,
+            state: nanoid::nanoid!(16),
+            verifier: nanoid::nanoid!(64),
+        }
     }
 }
 
@@ -285,31 +289,71 @@ pub(crate) async fn get_oauth_token_async(
     redirect_url: &str,
     scopes: &[String],
 ) -> Result<String> {
-    // Acquire the global mutex to ensure only one OAuth flow runs at a time
-    let _guard = OAUTH_MUTEX.lock().await;
-
-    let token_cache = TokenCache::new(host, client_id, scopes);
-
-    // Try cache first
-    if let Some(token) = token_cache.load_token() {
-        return Ok(token.access_token);
+    // Try to load from cache first
+    if let Some(token) = load_cached_token(client_id, scopes) {
+        return Ok(token);
     }
 
-    // Get endpoints and execute flow
+    // Get OIDC configuration
     let endpoints = get_workspace_endpoints(host).await?;
+    
+    // If no valid cached token, perform OAuth flow
     let flow = OAuthFlow::new(
         endpoints,
+        client_id.to_string(),
         client_id.to_string(),
         redirect_url.to_string(),
         scopes.to_vec(),
     );
 
-    // Execute the OAuth flow and get token
-    let token = flow.execute().await?;
+    let token_response = flow.execute().await?;
+    
+    // Cache the token before returning
+    save_token_cache(
+        client_id,
+        scopes,
+        &token_response.access_token,
+        token_response.expires_in,
+    );
 
-    // Cache and return
-    token_cache.save_token(&token)?;
-    Ok(token.access_token)
+    Ok(token_response.access_token)
+}
+
+pub async fn get_oauth_token_with_endpoints_async(
+    auth_endpoint: &str,
+    token_endpoint: &str,
+    client_id: &str,
+    client_secret: &str,
+    scopes: &[String],
+) -> Result<String> {
+    // Try to load from cache first
+    if let Some(token) = load_cached_token(client_id, scopes) {
+        return Ok(token);
+    }
+
+    // If no valid cached token, perform OAuth flow
+    let flow = OAuthFlow::new_with_endpoints(
+        OidcEndpoints {
+            authorization_endpoint: auth_endpoint.to_string(),
+            token_endpoint: token_endpoint.to_string(),
+        },
+        client_id.to_string(),
+        client_secret.to_string(),
+        DEFAULT_REDIRECT_URL.to_string(),
+        scopes.to_vec(),
+    );
+
+    let token_response = flow.execute().await?;
+    
+    // Cache the token before returning
+    save_token_cache(
+        client_id,
+        scopes,
+        &token_response.access_token,
+        token_response.expires_in,
+    );
+
+    Ok(token_response.access_token)
 }
 
 #[cfg(test)]
@@ -348,21 +392,25 @@ mod tests {
 
     #[test]
     fn test_token_cache() -> Result<()> {
-        let cache = TokenCache::new(
-            "https://example.com",
-            "test-client",
-            &["scope1".to_string()],
-        );
-
-        let token_data = TokenData {
+        let cache = TokenCache {
             access_token: "test-token".to_string(),
-            expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
+            expires_at: Some(Utc::now() + Duration::seconds(3600)),
         };
 
-        cache.save_token(&token_data)?;
+        let token_data = TokenResponse {
+            access_token: "test-token".to_string(),
+            expires_in: Some(3600),
+        };
 
-        let loaded_token = cache.load_token().unwrap();
-        assert_eq!(loaded_token.access_token, token_data.access_token);
+        save_token_cache(
+            "https://example.com",
+            &["scope1".to_string()],
+            &token_data.access_token,
+            token_data.expires_in,
+        );
+
+        let loaded_token = load_cached_token("https://example.com", &["scope1".to_string()]).unwrap();
+        assert_eq!(loaded_token, token_data.access_token);
 
         Ok(())
     }
