@@ -12,7 +12,8 @@ use serde_json::Value;
 use std::time::Duration;
 use url::Url;
 
-pub const OLLAMA_HOST: &str = "0.0.0.0:11434";
+pub const OLLAMA_HOST: &str = "0.0.0.0";
+pub const OLLAMA_DEFAULT_PORT: u16 = 11434;
 pub const OLLAMA_DEFAULT_MODEL: &str = "qwen2.5";
 // Ollama can run many models, we only provide the default
 pub const OLLAMA_KNOWN_MODELS: &[&str] = &[OLLAMA_DEFAULT_MODEL];
@@ -59,11 +60,23 @@ impl OllamaProvider {
             format!("http://{}", self.host)
         };
 
-        let base_url = Url::parse(&base)
+        let mut base_url = Url::parse(&base)
             .map_err(|e| ProviderError::RequestFailed(format!("Invalid base URL: {e}")))?;
+
+        // Set the default port if missing
+        if base_url.port().is_none() {
+            base_url.set_port(Some(OLLAMA_DEFAULT_PORT)).map_err(|_| {
+                ProviderError::RequestFailed("Failed to set default port".to_string())
+            })?;
+        }
+
+        println!("Ollama base_url: {:?}", base_url.to_string());
+
         let url = base_url.join("v1/chat/completions").map_err(|e| {
             ProviderError::RequestFailed(format!("Failed to construct endpoint URL: {e}"))
         })?;
+
+        println!("Ollama url: {:?}", url.to_string());
 
         let response = self.client.post(url).json(&payload).send().await?;
 
