@@ -16,10 +16,7 @@ jobs:
   # 1) Build CLI for multiple OS/Arch
   # ------------------------------------
   build-cli:
-    needs: [prepare-version]
     uses: ./.github/workflows/build-cli.yml
-    with:
-      version: ${{ needs.prepare-version.outputs.version }}
 
   # ------------------------------------
   # 2) Upload Install CLI Script
@@ -39,10 +36,8 @@ jobs:
   # 3) Bundle Desktop App (macOS only)
   # ------------------------------------------------------------
   bundle-desktop:
-    needs: [prepare-version]
     uses: ./.github/workflows/bundle-desktop.yml
     with:
-      version: ${{ needs.prepare-version.outputs.version }}
       signing: true
     secrets:
       CERTIFICATE_OSX_APPLICATION: ${{ secrets.CERTIFICATE_OSX_APPLICATION }}
