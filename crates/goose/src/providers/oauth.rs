@@ -76,8 +76,10 @@ impl TokenCache {
 }
 
 async fn get_workspace_endpoints(host: &str) -> Result<OidcEndpoints> {
-    let base_url = Url::parse(host)?;
-    let oidc_url = base_url.join("oidc/.well-known/oauth-authorization-server")?;
+    let base_url = Url::parse(host).expect("Invalid host URL");
+    let oidc_url = base_url
+        .join("oidc/.well-known/oauth-authorization-server")
+        .expect("Invalid OIDC URL");
 
     let client = reqwest::Client::new();
     let resp = client.get(oidc_url.clone()).send().await?;
