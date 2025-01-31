@@ -10,6 +10,7 @@ use mcp_core::Tool;
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use std::time::Duration;
+use url::Url;
 
 pub const GROQ_API_HOST: &str = "https://api.groq.com";
 pub const GROQ_DEFAULT_MODEL: &str = "llama-3.3-70b-versatile";

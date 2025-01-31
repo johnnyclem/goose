@@ -10,6 +10,7 @@ use mcp_core::tool::Tool;
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use std::time::Duration;
+use url::Url;
 
 pub const GOOGLE_API_HOST: &str = "https://generativelanguage.googleapis.com";
 pub const GOOGLE_DEFAULT_MODEL: &str = "gemini-2.0-flash-exp";

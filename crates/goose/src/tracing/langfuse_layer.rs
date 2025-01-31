@@ -7,6 +7,7 @@ use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use url::Url;
 use uuid::Uuid;
 
 const DEFAULT_LANGFUSE_URL: &str = "http://localhost:3000";

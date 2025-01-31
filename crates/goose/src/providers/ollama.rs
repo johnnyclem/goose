@@ -10,8 +10,9 @@ use mcp_core::tool::Tool;
 use reqwest::Client;
 use serde_json::Value;
 use std::time::Duration;
+use url::Url;
 
-pub const OLLAMA_HOST: &str = "http://localhost:11434";
+pub const OLLAMA_HOST: &str = "0.0.0.0:11434";
 pub const OLLAMA_DEFAULT_MODEL: &str = "qwen2.5";
 // Ollama can run many models, we only provide the default
 pub const OLLAMA_KNOWN_MODELS: &[&str] = &[OLLAMA_DEFAULT_MODEL];
@@ -51,9 +52,22 @@ impl OllamaProvider {
     }
 
     async fn post(&self, payload: Value) -> Result<Value, ProviderError> {
-        let url = format!("{}/v1/chat/completions", self.host.trim_end_matches('/'));
+        // OLLAMA_HOST is sometimes just the 'host' or 'host:port' without a scheme
+        let base = if self.host.starts_with("http://") || self.host.starts_with("https://") {
+            self.host.clone()
+        } else {
+            format!("http://{}", self.host)
+        };
 
-        let response = self.client.post(&url).json(&payload).send().await?;
+        let base_url = Url::parse(&base)
+            .map_err(|e| ProviderError::RequestFailed(format!("Invalid OLLAMA_HOST: {e}")))?;
+        let url = base_url.join("v1/chat/completions").map_err(|e| {
+            ProviderError::RequestFailed(format!(
+                "Failed to resolve join {base_url} with /v1/chat/completions: {e}"
+            ))
+        })?;
+
+        let response = self.client.post(url).json(&payload).send().await?;
 
         handle_response_openai_compat(response).await
     }
