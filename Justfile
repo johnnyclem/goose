@@ -89,12 +89,12 @@ get-tag-version:
 
 # create the git tag from Cargo.toml, must be on main
 tag: ensure-main
-    echo git tag v$(just get-tag-version)
+    git tag v$(just get-tag-version)
 
 # create tag and push to origin (use this when release branch is merged to main)
 tag-push: tag
     # this will kick of ci for release
-    echo git push origin tag v$(just get-tag-version)
+    git push origin tag v$(just get-tag-version)
 
 # generate release notes from git commits
 release-notes:
