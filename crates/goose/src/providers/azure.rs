@@ -63,16 +63,30 @@ impl AzureProvider {
     }
 
     async fn post(&self, payload: Value) -> Result<Value, ProviderError> {
-        let url = format!(
-            "{}/openai/deployments/{}/chat/completions?api-version={}",
-            self.endpoint.trim_end_matches('/'),
-            self.deployment_name,
-            AZURE_API_VERSION
-        );
+        let base_url = url::Url::parse(&self.endpoint.trim_end_matches('/'))
+            .map_err(|e| ProviderError::RequestFailed(format!("Invalid base URL: {e}")))?;
+
+        let mut url = base_url;
+        url.path_segments_mut()
+            .map_err(|_| ProviderError::RequestFailed("Cannot modify URL".to_string()))?
+            .push("openai")
+            .push("deployments")
+            .push(&self.deployment_name)
+            .push("chat")
+            .push("completions");
+
+        let url = url
+            .query_pairs_mut()
+            .append_pair("api-version", AZURE_API_VERSION)
+            .finish();
+
+        tracing::warn!("URL: {}", url);
+
+        println!("URL: {}", url);
 
         let response: reqwest::Response = self
             .client
-            .post(&url)
+            .post(url.as_str())
             .header("api-key", &self.api_key)
             .json(&payload)
             .send()
