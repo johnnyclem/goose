@@ -61,14 +61,15 @@ impl GoogleProvider {
     }
 
     async fn post(&self, payload: Value) -> Result<Value, ProviderError> {
-        let mut url = url::Url::parse(&self.host)
-        .map_err(|e| {
+        let mut url = url::Url::parse(&self.host).map_err(|e| {
             tracing::debug!("Invalid host: {}", &self.host);
             ProviderError::RequestFailed(format!("Invalid base URL: {e}"))
-        })?;        
-        url.set_path(&format!("v1beta/models/{}:generateContent", self.model.model_name));
+        })?;
+        url.set_path(&format!(
+            "v1beta/models/{}:generateContent",
+            self.model.model_name
+        ));
         url.set_query(Some(&format!("key={}", self.api_key)));
-
 
         let response = self
             .client
