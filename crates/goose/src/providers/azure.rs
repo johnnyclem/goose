@@ -66,9 +66,13 @@ impl AzureProvider {
         let base_url = url::Url::parse(&self.endpoint)
             .map_err(|e| ProviderError::RequestFailed(format!("Invalid base URL: {e}")))?;
 
-
-        let path = format!("openai/deployments/{}/chat/completions?api-version={}", self.deployment_name, AZURE_API_VERSION);
-        let url = base_url.join(&path).map_err(|e| ProviderError::RequestFailed(format!("Failed to construct endpoint url: {e}")))?;
+        let path = format!(
+            "openai/deployments/{}/chat/completions?api-version={}",
+            self.deployment_name, AZURE_API_VERSION
+        );
+        let url = base_url.join(&path).map_err(|e| {
+            ProviderError::RequestFailed(format!("Failed to construct endpoint url: {e}"))
+        })?;
 
         let response: reqwest::Response = self
             .client
